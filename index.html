@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Color Dice Predictor</title>
+<style>
+:root{
+  --bg:#07090d;--panel:#0d1117;--panel2:#11161e;--line:#242b35;
+  --text:#f5f7fb;--muted:#7d8796;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;min-height:100vh;background:#07090d;color:var(--text);
+  font-family:Arial,Helvetica,sans-serif;padding:28px;
+}
+.app{max-width:1180px;margin:auto}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.logo{font-size:14px;font-weight:900;letter-spacing:2px}
+.live{font-size:11px;border:1px solid #29313c;border-radius:99px;padding:7px 10px}
+.layout{display:grid;grid-template-columns:1fr 350px;gap:18px}
+.panel{
+  background:#0d1117;border:1px solid var(--line);border-radius:17px;padding:15px;
+}
+.title{font-size:12px;font-weight:bold;margin-bottom:13px;color:#d7dde7}
+.colors{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-bottom:18px}
+.color{
+  height:62px;border:3px solid white;border-radius:12px;cursor:pointer;
+  position:relative;box-shadow:0 5px 16px rgba(0,0,0,.28);
+  transition:transform .08s,filter .08s;
+}
+.color:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.color:active{transform:scale(.98)}
+.color:after{
+  content:"";width:9px;height:9px;border-radius:50%;background:white;
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+}
+.color span{
+  position:absolute;top:69px;left:0;right:0;text-align:center;color:#aeb7c4;
+  font-size:10px;font-weight:bold;
+}
+.blue{background:#2196f3}.yellow{background:#ffd21f}.red{background:#ff3030}
+.green{background:#14a92d}.purple{background:#8b58e8}.orange{background:#ff7900}
+.box{
+  border:1px solid var(--line);background:#0a0e13;border-radius:12px;padding:13px;margin-top:12px;
+}
+.box-title{font-size:11px;font-weight:bold}
+.box-sub{font-size:10px;color:#6e7887;margin-top:4px;line-height:1.45}
+.slots{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+.slot{
+  height:48px;background:#11161d;border:1px solid #29313b;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;color:#56606f;font-size:11px;font-weight:bold;
+}
+.slot.filled:after{content:"";width:8px;height:8px;border-radius:50%;background:white}
+.controls{display:flex;gap:8px;margin-top:12px;align-items:center}
+.btn{
+  border:1px solid #29313b;border-radius:8px;background:#141a22;color:white;
+  padding:9px 12px;cursor:pointer;font-size:11px;font-weight:bold;
+}
+.btn:hover{background:#1a222c}
+.status{margin-left:auto;color:#697483;font-size:10px}
+.next{font-size:9px;color:#697483;font-weight:bold;letter-spacing:1.5px}
+.die{
+  width:92px;height:92px;border:6px solid white;border-radius:21px;margin-top:13px;
+  display:flex;align-items:center;justify-content:center;
+}
+.die:after{content:"";width:14px;height:14px;background:white;border-radius:50%}
+.prediction{font-size:38px;font-weight:900;margin:13px 0 8px}
+.badge{
+  display:inline-block;border:1px solid #39331b;background:#211d10;color:#ffe365;
+  border-radius:99px;padding:7px 11px;font-size:9px;font-weight:bold;
+}
+.note{font-size:9px;color:#626d7c;margin-top:10px;line-height:1.4}
+.separator{height:1px;background:#222933;margin:14px 0}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.stat{background:#0c1117;border:1px solid #222a34;border-radius:9px;padding:9px}
+.stat label{display:block;color:#697483;font-size:8px;font-weight:bold;margin-bottom:5px}
+.stat strong{font-size:14px}
+.rank-title{margin-top:15px;font-size:8px;color:#697483;font-weight:bold;letter-spacing:1px}
+.rank{display:flex;gap:8px;align-items:center;border-bottom:1px solid #171d24;padding:7px 0;font-size:10px}
+.sw{width:8px;height:8px;border-radius:50%}.rank .name{flex:1;font-weight:bold}.pct{color:#8f99a7}
+.history{max-height:175px;overflow:auto;margin-top:7px}
+.hist{display:flex;align-items:center;gap:5px;border:1px solid #1f2630;border-radius:8px;padding:7px;margin-bottom:5px}
+.hist b{width:28px;font-size:9px;color:#717b89}
+.hdot{width:20px;height:20px;border-radius:6px;border:1px solid rgba(255,255,255,.2);position:relative}
+.hdot:after{content:"";width:5px;height:5px;background:white;border-radius:50%;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+.link{color:#cbd5df;text-decoration:none;font-size:10px}
+@media(max-width:850px){
+  body{padding:12px}
+  .layout{grid-template-columns:1fr}
+  .colors{grid-template-columns:repeat(2,1fr);gap:12px 10px}
+  .color{height:58px;margin-bottom:14px}
+  .color span{top:63px}
+  .header{margin-bottom:12px}
+  .panel{padding:12px;border-radius:14px}
+  .prediction{font-size:32px}
+  .die{width:82px;height:82px;border-width:5px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="logo">● &nbsp; COLOR DICE</div>
+    <div class="live">● LIVE INPUT</div>
+  </div>
+
+  <div class="layout">
+    <div class="panel">
+      <div class="title">Choose the 4 colors shown on the livestream</div>
+
+      <div class="colors">
+        <button class="color blue" onclick="pickColor('Blue')"><span>Blue</span></button>
+        <button class="color yellow" onclick="pickColor('Yellow')"><span>Yellow</span></button>
+        <button class="color red" onclick="pickColor('Red')"><span>Red</span></button>
+        <button class="color green" onclick="pickColor('Green')"><span>Green</span></button>
+        <button class="color purple" onclick="pickColor('Purple')"><span>Purple</span></button>
+        <button class="color orange" onclick="pickColor('Orange')"><span>Orange</span></button>
+      </div>
+
+      <div class="box" style="margin-top:30px">
+        <div style="display:flex;justify-content:space-between;gap:10px">
+          <div>
+            <div class="box-title">Current live round</div>
+            <div class="box-sub">Click exactly four colors. After the fourth click, that round is saved.</div>
+          </div>
+          <a class="link" target="_blank" rel="noopener" href="https://www.online-dice.com/roll-color-dice/4/">Open Online-Dice ↗</a>
+        </div>
+        <div class="slots" id="mainSlots"></div>
+        <div class="controls">
+          <button class="btn" onclick="undo()">Undo</button>
+          <button class="btn" onclick="clearAll()">Clear all</button>
+          <div class="status" id="status">0/4 selected</div>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="box-title">Important</div>
+        <div class="box-sub">This ranks patterns in the results you enter. A truly random dice roll cannot be reliably predicted from earlier rolls.</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="next">NEXT COLOR TREND</div>
+      <div class="die yellow" id="die"></div>
+      <div class="prediction" id="prediction">Waiting…</div>
+      <div class="badge" id="badge">NO DATA</div>
+      <div class="note">Trend estimate only — not a guaranteed next roll.</div>
+
+      <div class="separator"></div>
+
+      <div class="box-title">Current live round</div>
+      <div class="box-sub" id="roundText">Round 1 · awaiting 4 colors</div>
+      <div class="slots" id="sideSlots"></div>
+
+      <div class="stats" style="margin-top:12px">
+        <div class="stat"><label>TOP SHARE</label><strong id="topShare">0.0%</strong></div>
+        <div class="stat"><label>SIGNAL</label><strong id="signal">None</strong></div>
+        <div class="stat"><label>ROUNDS</label><strong id="roundCount">0</strong></div>
+      </div>
+
+      <div class="rank-title">RANKED COLORS</div>
+      <div id="ranking"></div>
+
+      <div class="rank-title">RECENT ROUNDS</div>
+      <div class="history" id="history"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+var colors = {
+  Blue:{hex:"#2196f3",cls:"blue"},
+  Yellow:{hex:"#ffd21f",cls:"yellow"},
+  Red:{hex:"#ff3030",cls:"red"},
+  Green:{hex:"#14a92d",cls:"green"},
+  Purple:{hex:"#8b58e8",cls:"purple"},
+  Orange:{hex:"#ff7900",cls:"orange"}
+};
+
+var names = ["Blue","Yellow","Red","Green","Purple","Orange"];
+var current = [];
+var rounds = [];
+
+try {
+  var saved = window.localStorage.getItem("colorDiceRoundsV2");
+  if (saved) rounds = JSON.parse(saved) || [];
+} catch (e) {
+  rounds = [];
+}
+
+function saveRounds(){
+  try {
+    window.localStorage.setItem("colorDiceRoundsV2", JSON.stringify(rounds.slice(-150)));
+  } catch (e) {}
+}
+
+function pickColor(name){
+  if(current.length >= 4) return;
+  current.push(name);
+  render();
+
+  if(current.length === 4){
+    var finished = current.slice(0);
+    window.setTimeout(function(){
+      rounds.push(finished);
+      current = [];
+      saveRounds();
+      render();
+    }, 250);
+  }
+}
+
+function undo(){
+  if(current.length > 0){
+    current.pop();
+  } else if(rounds.length > 0){
+    current = rounds.pop().slice(0);
+    saveRounds();
+  }
+  render();
+}
+
+function clearAll(){
+  current = [];
+  rounds = [];
+  saveRounds();
+  render();
+}
+
+function makeSlots(){
+  var html = "";
+  for(var i=0;i<4;i++){
+    if(current[i]){
+      html += '<div class="slot filled" style="background:'+colors[current[i]].hex+'"></div>';
+    } else {
+      html += '<div class="slot">'+(i+1)+'</div>';
+    }
+  }
+  document.getElementById("mainSlots").innerHTML = html;
+  document.getElementById("sideSlots").innerHTML = html;
+  document.getElementById("status").innerHTML = current.length + "/4 selected";
+  document.getElementById("roundText").innerHTML =
+    "Round " + (rounds.length+1) + " · awaiting " + (4-current.length) + " color" + ((4-current.length)==1?"":"s");
+}
+
+function getRanked(){
+  var score = {};
+  var total = 0;
+  for(var n=0;n<names.length;n++) score[names[n]] = 0;
+
+  for(var r=0;r<rounds.length;r++){
+    var age = rounds.length - 1 - r;
+    var weight = Math.pow(0.94, age);
+    for(var j=0;j<rounds[r].length;j++){
+      score[rounds[r][j]] += weight;
+      total += weight;
+    }
+  }
+
+  for(var c=0;c<current.length;c++){
+    score[current[c]] += 0.25;
+    total += 0.25;
+  }
+
+  var ranked = [];
+  for(var i=0;i<names.length;i++){
+    ranked.push({
+      name:names[i],
+      score:score[names[i]],
+      pct: total ? (score[names[i]]/total)*100 : 0
+    });
+  }
+  ranked.sort(function(a,b){ return b.score-a.score; });
+  return ranked;
+}
+
+function renderPrediction(){
+  var ranked = getRanked();
+  var top = ranked[0];
+  var second = ranked[1];
+  var hasData = rounds.length > 0 || current.length > 0;
+
+  var rankHtml = "";
+  for(var i=0;i<ranked.length;i++){
+    rankHtml += '<div class="rank">'+
+      '<span class="sw" style="background:'+colors[ranked[i].name].hex+'"></span>'+ 
+      '<span class="name">'+(i+1)+'. '+ranked[i].name+'</span>'+ 
+      '<span class="pct">'+ranked[i].pct.toFixed(1)+'%</span>'+ 
+    '</div>';
+  }
+  document.getElementById("ranking").innerHTML = rankHtml;
+  document.getElementById("roundCount").innerHTML = rounds.length;
+
+  if(!hasData){
+    document.getElementById("prediction").innerHTML = "Waiting…";
+    document.getElementById("die").className = "die yellow";
+    document.getElementById("badge").innerHTML = "NO DATA";
+    document.getElementById("topShare").innerHTML = "0.0%";
+    document.getElementById("signal").innerHTML = "None";
+    return;
+  }
+
+  document.getElementById("prediction").innerHTML = top.name;
+  document.getElementById("die").className = "die " + colors[top.name].cls;
+  document.getElementById("topShare").innerHTML = top.pct.toFixed(1) + "%";
+
+  var margin = top.pct-second.pct;
+  var signalText = "Weak";
+  var badgeText = "LOW";
+  if(top.pct > 24.7 && margin >= 6){
+    signalText = "Moderate";
+    badgeText = "MAYBE";
+  }
+  if(top.pct > 30.7 && margin >= 10 && rounds.length >= 4){
+    signalText = "Strong";
+    badgeText = "STRONG TREND";
+  }
+  document.getElementById("signal").innerHTML = signalText;
+  document.getElementById("badge").innerHTML = badgeText;
+}
+
+function renderHistory(){
+  var el = document.getElementById("history");
+  if(rounds.length === 0){
+    el.innerHTML = '<div class="box-sub">No completed rounds yet.</div>';
+    return;
+  }
+
+  var html = "";
+  var start = Math.max(0, rounds.length-12);
+  for(var r=rounds.length-1;r>=start;r--){
+    html += '<div class="hist"><b>#'+(r+1)+'</b>';
+    for(var j=0;j<rounds[r].length;j++){
+      html += '<span class="hdot" title="'+rounds[r][j]+'" style="background:'+colors[rounds[r][j]].hex+'"></span>';
+    }
+    html += '</div>';
+  }
+  el.innerHTML = html;
+}
+
+function render(){
+  makeSlots();
+  renderPrediction();
+  renderHistory();
+}
+
+render();
+</script>
+</body>
+</html>
