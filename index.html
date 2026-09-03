@@ -136,16 +136,16 @@ body{
 
       <div class="box">
         <div class="box-title">Important</div>
-        <div class="box-sub">The predictor waits until all 4 colors are entered, then chooses the strongest candidate only from those 4 colors using your saved history and recent patterns. Fair random dice are independent, so this is still only a pattern guess.</div>
+        <div class="box-sub">The predictor waits until all 4 colors are entered, then ranks all 6 colors and picks the strongest next-color candidate using your saved history and recent patterns. Fair random dice are independent, so this is still only a pattern guess.</div>
       </div>
     </div>
 
     <div class="panel">
-      <div class="next">BEST OF THE 4</div>
+      <div class="next">MOST LIKELY NEXT</div>
       <div class="die yellow" id="die"></div>
       <div class="prediction" id="prediction">Waiting…</div>
       <div class="badge" id="badge">NO DATA</div>
-      <div class="note">The guess appears only after all 4 colors are entered, and it will always be one of those 4 colors.</div>
+      <div class="note">The guess appears only after all 4 colors are entered, then it ranks all 6 colors for what may come next.</div>
 
       <div class="separator"></div>
 
@@ -159,7 +159,7 @@ body{
         <div class="stat"><label>ROUNDS</label><strong id="roundCount">0</strong></div>
       </div>
 
-      <div class="rank-title">RANKED FROM YOUR 4</div>
+      <div class="rank-title">RANKED ALL COLORS</div>
       <div id="ranking"></div>
 
       <div class="rank-title">RECENT ROUNDS</div>
@@ -254,107 +254,110 @@ function getHistorySequence(excludeLatestRound){
   return seq;
 }
 
-function getLatestCandidates(){
-  if(rounds.length === 0) return [];
-  var latestRound = rounds[rounds.length - 1];
-  var seen = {};
-  var out = [];
-  for(var i=0;i<latestRound.length;i++){
-    var c = latestRound[i];
-    if(!seen[c]){
-      seen[c] = true;
-      out.push(c);
-    }
-  }
-  return out;
-}
-
 function getRanked(){
-  var candidates = getLatestCandidates();
-  if(candidates.length === 0) return [];
+  if(rounds.length === 0) return [];
 
   var latestRound = rounds[rounds.length - 1];
   var hist = getHistorySequence(true);
   var score = {};
-  var recent = {};
   var overall = {};
-  var transition = {};
-  var inRound = {};
+  var recent = {};
+  var follow1 = {};
+  var follow2 = {};
+  var follow3 = {};
+  var follow4 = {};
   var i, n;
 
-  for(n=0;n<candidates.length;n++){
-    var c = candidates[n];
+  for(n=0;n<names.length;n++){
+    var c = names[n];
     score[c] = 0;
+    overall[c] = 1;
     recent[c] = 0;
-    overall[c] = 0;
-    transition[c] = 0.35;
-    inRound[c] = 0;
+    follow1[c] = 0.6;
+    follow2[c] = 0.5;
+    follow3[c] = 0.4;
+    follow4[c] = 0.3;
   }
 
-  for(i=0;i<latestRound.length;i++){
-    if(inRound[latestRound[i]] !== undefined) inRound[latestRound[i]]++;
-  }
+  for(i=0;i<hist.length;i++) overall[hist[i]] += 1;
+  var overallTotal = hist.length + names.length;
 
-  for(i=0;i<hist.length;i++){
-    if(overall[hist[i]] !== undefined) overall[hist[i]]++;
-  }
-
-  var start = Math.max(0, hist.length - 28);
+  var start = Math.max(0, hist.length - 48);
   var recentTotal = 0;
   for(i=start;i<hist.length;i++){
     var age = hist.length - 1 - i;
-    var w = Math.pow(0.91, age);
-    if(recent[hist[i]] !== undefined) recent[hist[i]] += w;
+    var w = Math.pow(0.94, age);
+    recent[hist[i]] += w;
     recentTotal += w;
   }
 
-  var trigger = latestRound[latestRound.length - 1];
-  var transitionTotal = candidates.length * 0.35;
-  for(i=0;i<hist.length-1;i++){
-    if(hist[i] === trigger && transition[hist[i+1]] !== undefined){
-      var tAge = (hist.length - 2) - i;
-      var tw = Math.pow(0.95, Math.max(0,tAge));
-      transition[hist[i+1]] += tw;
-      transitionTotal += tw;
+  var ctx = latestRound.slice(-4);
+
+  function collectFollowers(k, bucket, smoothing){
+    if(ctx.length < k || hist.length <= k) return names.length * smoothing;
+    var total = names.length * smoothing;
+    for(var x=k-1; x<hist.length-1; x++){
+      var match = true;
+      for(var y=0;y<k;y++){
+        if(hist[x-k+1+y] !== ctx[ctx.length-k+y]){
+          match = false;
+          break;
+        }
+      }
+      if(match){
+        var age = (hist.length - 2) - x;
+        var weight = Math.pow(0.97, Math.max(0, age));
+        bucket[hist[x+1]] += weight;
+        total += weight;
+      }
     }
+    return total;
   }
 
-  var histTotal = hist.length || 1;
-  for(n=0;n<candidates.length;n++){
-    var name = candidates[n];
-    var overallP = overall[name] / histTotal;
-    var recentP = recentTotal ? recent[name] / recentTotal : 0;
-    var transitionP = transitionTotal ? transition[name] / transitionTotal : 0;
-    var roundP = inRound[name] / 4;
+  var total1 = collectFollowers(1, follow1, 0.6);
+  var total2 = collectFollowers(2, follow2, 0.5);
+  var total3 = collectFollowers(3, follow3, 0.4);
+  var total4 = collectFollowers(4, follow4, 0.3);
 
-    if(hist.length >= 12){
-      score[name] = overallP * 0.24 + recentP * 0.34 + transitionP * 0.32 + roundP * 0.10;
+  for(n=0;n<names.length;n++){
+    var name = names[n];
+    var pOverall = overall[name] / overallTotal;
+    var pRecent = recentTotal ? recent[name] / recentTotal : 1/6;
+    var p1 = follow1[name] / total1;
+    var p2 = follow2[name] / total2;
+    var p3 = follow3[name] / total3;
+    var p4 = follow4[name] / total4;
+
+    if(hist.length >= 60){
+      score[name] = pOverall*0.12 + pRecent*0.22 + p1*0.20 + p2*0.20 + p3*0.14 + p4*0.12;
+    } else if(hist.length >= 20){
+      score[name] = pOverall*0.18 + pRecent*0.30 + p1*0.24 + p2*0.16 + p3*0.08 + p4*0.04;
     } else if(hist.length > 0){
-      score[name] = overallP * 0.30 + recentP * 0.30 + transitionP * 0.20 + roundP * 0.20;
+      score[name] = pOverall*0.28 + pRecent*0.42 + p1*0.22 + p2*0.08;
     } else {
-      score[name] = roundP;
+      var count = 0;
+      for(i=0;i<latestRound.length;i++) if(latestRound[i] === name) count++;
+      score[name] = (1 + count*0.12) / 6;
     }
   }
 
   var sum = 0;
-  for(n=0;n<candidates.length;n++) sum += score[candidates[n]];
+  for(n=0;n<names.length;n++) sum += score[names[n]];
 
   var ranked = [];
-  for(n=0;n<candidates.length;n++){
-    var nm = candidates[n];
+  for(n=0;n<names.length;n++){
+    var nm = names[n];
     ranked.push({
       name:nm,
       score:score[nm],
-      pct:sum ? (score[nm] / sum) * 100 : (100 / candidates.length)
+      pct:sum ? (score[nm]/sum)*100 : 100/6
     });
   }
 
   ranked.sort(function(a,b){
-    if(b.score !== a.score) return b.score - a.score;
-    if(inRound[b.name] !== inRound[a.name]) return inRound[b.name] - inRound[a.name];
-    return latestRound.lastIndexOf(b.name) - latestRound.lastIndexOf(a.name);
+    if(b.score !== a.score) return b.score-a.score;
+    return names.indexOf(a.name)-names.indexOf(b.name);
   });
-
   return ranked;
 }
 
@@ -367,7 +370,7 @@ function renderPrediction(){
     document.getElementById("badge").innerHTML = current.length > 0 ? (current.length + "/4 ENTERED") : "NO DATA";
     document.getElementById("topShare").innerHTML = "0.0%";
     document.getElementById("signal").innerHTML = "Waiting";
-    document.getElementById("ranking").innerHTML = '<div class="box-sub">The prediction will appear after the fourth color.</div>';
+    document.getElementById("ranking").innerHTML = '<div class="box-sub">The prediction will appear after the fourth color, then all 6 colors will be ranked.</div>';
     return;
   }
 
@@ -393,14 +396,14 @@ function renderPrediction(){
   var margin = top.pct - second.pct;
   var historyCount = getHistorySequence(true).length;
   var signalText = "Low";
-  var badgeText = "BEST OF 4";
+  var badgeText = "ALL 6 RANKED";
   if(historyCount >= 12 && margin >= 5){
     signalText = "Medium";
-    badgeText = "LIKELY OF 4";
+    badgeText = "LIKELY NEXT";
   }
   if(historyCount >= 36 && margin >= 9){
     signalText = "High";
-    badgeText = "TOP OF 4";
+    badgeText = "TOP NEXT";
   }
   document.getElementById("signal").innerHTML = signalText;
   document.getElementById("badge").innerHTML = badgeText;
