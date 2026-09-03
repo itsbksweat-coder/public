@@ -124,7 +124,7 @@ body{
             <div class="box-title">Current live round</div>
             <div class="box-sub">Click exactly four colors. After the fourth click, that round is saved.</div>
           </div>
-          <a class="link" target="_blank" rel="noopener" href="https://www.online-dice.com/roll-color-dice/4/">Open Online-Dice ↗</a>
+          <a class="link" target="_blank" href="https://www.online-dice.com/roll-color-dice/4/">Open Online-Dice ↗</a>
         </div>
         <div class="slots" id="mainSlots"></div>
         <div class="controls">
@@ -136,16 +136,16 @@ body{
 
       <div class="box">
         <div class="box-title">Important</div>
-        <div class="box-sub">This ranks patterns in the results you enter. A truly random dice roll cannot be reliably predicted from earlier rolls.</div>
+        <div class="box-sub">The guess combines recent color frequency with what historically appeared after the latest color you entered. Fair random dice are independent, so this is a pattern guess rather than a guaranteed prediction.</div>
       </div>
     </div>
 
     <div class="panel">
-      <div class="next">NEXT COLOR TREND</div>
+      <div class="next">MOST LIKELY NEXT</div>
       <div class="die yellow" id="die"></div>
       <div class="prediction" id="prediction">Waiting…</div>
       <div class="badge" id="badge">NO DATA</div>
-      <div class="note">Trend estimate only — not a guaranteed next roll.</div>
+      <div class="note">Pattern-based guess from your entered history — random rolls can still land on any color.</div>
 
       <div class="separator"></div>
 
@@ -154,7 +154,7 @@ body{
       <div class="slots" id="sideSlots"></div>
 
       <div class="stats" style="margin-top:12px">
-        <div class="stat"><label>TOP SHARE</label><strong id="topShare">0.0%</strong></div>
+        <div class="stat"><label>GUESS SCORE</label><strong id="topShare">0.0%</strong></div>
         <div class="stat"><label>SIGNAL</label><strong id="signal">None</strong></div>
         <div class="stat"><label>ROUNDS</label><strong id="roundCount">0</strong></div>
       </div>
@@ -244,34 +244,82 @@ function makeSlots(){
     "Round " + (rounds.length+1) + " · awaiting " + (4-current.length) + " color" + ((4-current.length)==1?"":"s");
 }
 
-function getRanked(){
-  var score = {};
-  var total = 0;
-  for(var n=0;n<names.length;n++) score[names[n]] = 0;
-
+function getSequence(){
+  var seq = [];
   for(var r=0;r<rounds.length;r++){
-    var age = rounds.length - 1 - r;
-    var weight = Math.pow(0.94, age);
-    for(var j=0;j<rounds[r].length;j++){
-      score[rounds[r][j]] += weight;
-      total += weight;
+    for(var j=0;j<rounds[r].length;j++) seq.push(rounds[r][j]);
+  }
+  for(var c=0;c<current.length;c++) seq.push(current[c]);
+  return seq;
+}
+
+function getRanked(){
+  var seq = getSequence();
+  var score = {};
+  var recent = {};
+  var transitions = {};
+  var i, n;
+
+  for(n=0;n<names.length;n++){
+    score[names[n]] = 0;
+    recent[names[n]] = 0;
+    transitions[names[n]] = 1;
+  }
+
+  if(seq.length === 0){
+    return names.map(function(name){
+      return {name:name, score:0, pct:0};
+    });
+  }
+
+  var start = Math.max(0, seq.length - 36);
+  var recentTotal = 0;
+  for(i=start;i<seq.length;i++){
+    var age = seq.length - 1 - i;
+    var w = Math.pow(0.93, age);
+    recent[seq[i]] += w;
+    recentTotal += w;
+  }
+
+  var latest = seq[seq.length - 1];
+  var transitionTotal = names.length;
+  for(i=0;i<seq.length-1;i++){
+    if(seq[i] === latest){
+      var tAge = (seq.length - 2) - i;
+      var tw = Math.pow(0.96, Math.max(0,tAge));
+      transitions[seq[i+1]] += tw;
+      transitionTotal += tw;
     }
   }
 
-  for(var c=0;c<current.length;c++){
-    score[current[c]] += 0.25;
-    total += 0.25;
+  var transitionWeight = seq.length >= 12 ? 0.58 : 0.35;
+  var recentWeight = 1 - transitionWeight;
+
+  for(n=0;n<names.length;n++){
+    var name = names[n];
+    var recentP = recentTotal ? recent[name] / recentTotal : 1/6;
+    var transitionP = transitions[name] / transitionTotal;
+    score[name] = recentP * recentWeight + transitionP * transitionWeight;
   }
 
+  var sum = 0;
+  for(n=0;n<names.length;n++) sum += score[names[n]];
+
   var ranked = [];
-  for(var i=0;i<names.length;i++){
+  for(n=0;n<names.length;n++){
+    var nm = names[n];
     ranked.push({
-      name:names[i],
-      score:score[names[i]],
-      pct: total ? (score[names[i]]/total)*100 : 0
+      name:nm,
+      score:score[nm],
+      pct:sum ? (score[nm] / sum) * 100 : 0
     });
   }
-  ranked.sort(function(a,b){ return b.score-a.score; });
+
+  ranked.sort(function(a,b){
+    if(b.score !== a.score) return b.score - a.score;
+    return names.indexOf(a.name) - names.indexOf(b.name);
+  });
+
   return ranked;
 }
 
@@ -295,7 +343,7 @@ function renderPrediction(){
   if(!hasData){
     document.getElementById("prediction").innerHTML = "Waiting…";
     document.getElementById("die").className = "die yellow";
-    document.getElementById("badge").innerHTML = "NO DATA";
+    document.getElementById("badge").innerHTML = "ENTER RESULTS";
     document.getElementById("topShare").innerHTML = "0.0%";
     document.getElementById("signal").innerHTML = "None";
     return;
@@ -306,15 +354,16 @@ function renderPrediction(){
   document.getElementById("topShare").innerHTML = top.pct.toFixed(1) + "%";
 
   var margin = top.pct-second.pct;
+  var dataCount = getSequence().length;
   var signalText = "Weak";
-  var badgeText = "LOW";
-  if(top.pct > 24.7 && margin >= 6){
+  var badgeText = "BEST GUESS";
+  if(dataCount >= 12 && margin >= 3){
     signalText = "Moderate";
-    badgeText = "MAYBE";
+    badgeText = "LIKELY";
   }
-  if(top.pct > 30.7 && margin >= 10 && rounds.length >= 4){
+  if(dataCount >= 28 && margin >= 7){
     signalText = "Strong";
-    badgeText = "STRONG TREND";
+    badgeText = "TOP PATTERN";
   }
   document.getElementById("signal").innerHTML = signalText;
   document.getElementById("badge").innerHTML = badgeText;
